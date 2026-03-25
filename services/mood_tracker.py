@@ -1,40 +1,86 @@
-import numpy as np
-from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import StandardScaler
-
-class EmotionPredictor:
-    def __init__(self):
-        self.model = LogisticRegression()
-        self.scaler = StandardScaler()
-
-    def train(self, features, labels):
-        X = self.scaler.fit_transform(features)
-        self.model.fit(X, labels)
-
-    def predict(self, data):
-        X = self.scaler.transform(data)
-        return self.model.predict(X)
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+import statistics
 
 class MoodTracker:
     def __init__(self):
-        self.emotion_predictor = EmotionPredictor()
+        self.mood_history: Dict[datetime, Dict] = {}
+        self.mood_scale = {
+            1: 'Very Low',
+            2: 'Low',
+            3: 'Neutral',
+            4: 'Good',
+            5: 'Excellent'
+        }
+        self.genre_recommendations = {
+            'Very Low': ['upbeat pop', 'motivational', 'uplifting classical'],
+            'Low': ['light jazz', 'acoustic', 'ambient'],
+            'Neutral': ['indie rock', 'pop', 'electronic'],
+            'Good': ['dance', 'rock', 'hip hop'],
+            'Excellent': ['party hits', 'electronic dance', 'energetic rock']
+        }
 
-    def track_mood(self, user_data):
-        features = self.extract_features(user_data)
-        emotions = self.emotion_predictor.predict(features)
-        return emotions
+    def log_mood(self, rating: int, notes: str = '') -> bool:
+        if rating not in self.mood_scale:
+            return False
+        
+        self.mood_history[datetime.now()] = {
+            'rating': rating,
+            'mood_label': self.mood_scale[rating],
+            'notes': notes
+        }
+        return True
 
-    def extract_features(self, user_data):
-        # Extract relevant features from user data
-        features = np.array([
-            user_data['heart_rate'],
-            user_data['sleep_duration'],
-            user_data['activity_level'],
-            user_data['social_interactions']
-        ])
-        return features
+    def get_mood_pattern(self, days: int = 7) -> Dict:
+        cutoff_date = datetime.now() - timedelta(days=days)
+        recent_moods = [
+            entry['rating'] for date, entry in self.mood_history.items()
+            if date >= cutoff_date
+        ]
 
-    def train_emotion_model(self, training_data):
-        features = [self.extract_features(data) for data in training_data]
-        labels = [data['emotion'] for data in training_data]
-        self.emotion_predictor.train(features, labels)
+        if not recent_moods:
+            return {'pattern': 'insufficient_data'}
+
+        avg_mood = statistics.mean(recent_moods)
+        mood_trend = 'stable'
+        
+        if len(recent_moods) >= 3:
+            if recent_moods[-1] > recent_moods[-2] > recent_moods[-3]:
+                mood_trend = 'improving'
+            elif recent_moods[-1] < recent_moods[-2] < recent_moods[-3]:
+                mood_trend = 'declining'
+
+        return {
+            'average_mood': round(avg_mood, 2),
+            'trend': mood_trend,
+            'num_entries': len(recent_moods),
+            'recommended_genres': self.get_music_recommendations(avg_mood)
+        }
+
+    def get_music_recommendations(self, mood_value: float) -> List[str]:
+        if mood_value < 1.5:
+            return self.genre_recommendations['Very Low']
+        elif mood_value < 2.5:
+            return self.genre_recommendations['Low']
+        elif mood_value < 3.5:
+            return self.genre_recommendations['Neutral']
+        elif mood_value < 4.5:
+            return self.genre_recommendations['Good']
+        else:
+            return self.genre_recommendations['Excellent']
+
+    def get_mood_summary(self, days: int = 30) -> Dict:
+        pattern = self.get_mood_pattern(days)
+        cutoff_date = datetime.now() - timedelta(days=days)
+        
+        mood_distribution = {
+            label: len([e for d, e in self.mood_history.items()
+                       if e['mood_label'] == label and d >= cutoff_date])
+            for label in self.mood_scale.values()
+        }
+
+        return {
+            'pattern_analysis': pattern,
+            'mood_distribution': mood_distribution,
+            'period_days': days
+        }
